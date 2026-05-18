@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Dynamic hold：阈值开仓，持仓期内按 alpha 相对 α₀ 阶梯调仓（须先过方向阈值；按步取整 ``k×adjust_notional``、每点仅用当前 delta），止盈/止损/时间/信号反向（达阈值）任一平仓。可选 **TWAP**：``twap_slice_notional``>0 且 ``order_size_mode=notional`` 时，每帧至多一片开仓；**全平类**里时间/TP/SL 等仍可按片平仓，**信号反向**与 **TWAP 期间阶梯减仓超量** 为一次性满仓 aggressive 限价（见仓库根 ``rules.md`` §3.2）。
 
-说明：存在未完成平仓挂单（含部分减仓）时，本期暂不叠加新的 alpha 平仓/阶梯；**超时撤单**与**强平撤非强平挂单**可避免单笔限价长期不成交导致后续全平/强平永远无法再挂单。强平在途单由 `forced_flatten_order_id` 标记，强平分支不撤该 oid。
+说明：存在未完成平仓挂单（含部分减仓）时，本期暂不叠加新的 alpha 平仓/阶梯；开仓/平仓均有**超时撤单**，且强平会撤非强平挂单，避免单笔限价长期不成交导致流程僵住。强平在途单由 `forced_flatten_order_id` 标记，强平分支不撤该 oid。
 信号反向与开仓对称：多仓须 ``alpha <= -alpha_threshold``、空仓须 ``alpha >= alpha_threshold`` 才全平。
 
 与 ``strategy.legacy.run_backtest_for_alpha_records`` 对齐的 summary 字段含：
@@ -21,12 +21,13 @@ import numpy as np
 
 from ..backtest import GTC
 from ..backtest import LIMIT
+from ..backtest import OrderLiq
 from ..backtest import Trade
 from ..backtest import build_hbt
 from ..backtest import cancel_exit_order_if_active
 from ..backtest import compute_order_shares
 from ..backtest import EXIT_ORDER_STALE_NS
-from ..backtest import get_aggressive_limit_price
+from ..backtest import get_limit_price
 from ..backtest import is_order_filled
 from ..backtest import submit_entry_order
 from ..backtest import summarize_trades
@@ -171,6 +172,8 @@ def run_dynamic_hold_backtest(
 	stamp_duty_rate: float,
 	force_flatten_hhmmss: str = "14:45:00",
 	force_flatten_extra_ticks: int = 5,
+	entry_liq: OrderLiq = "taker",
+	exit_liq: OrderLiq = "taker",
 	alpha_adjust_step: float = 0.01,
 	adjust_notional: float = 10_000.0,
 	take_profit_pct: float | None = None,
@@ -187,6 +190,12 @@ def run_dynamic_hold_backtest(
 		raise ValueError("adjust_notional 必须 > 0")
 	if commission_rate < 0 or stamp_duty_rate < 0:
 		raise ValueError("commission_rate / stamp_duty_rate 不能为负数")
+	if force_flatten_extra_ticks < 0:
+		raise ValueError("force_flatten_extra_ticks 不能为负数")
+	if entry_liq not in {"maker", "taker"}:
+		raise ValueError("entry_liq 必须是 maker 或 taker")
+	if exit_liq not in {"maker", "taker"}:
+		raise ValueError("exit_liq 必须是 maker 或 taker")
 	try:
 		force_flatten_ts_ns = to_ns_utc(trade_date, force_flatten_hhmmss)
 	except ValueError as exc:
@@ -215,6 +224,7 @@ def run_dynamic_hold_backtest(
 	current: DynamicPosition | None = None
 	# 开仓/加仓挂单：oid -> (方向, alpha, 股数, 标签, 来源 tw|ld|op)；见 rules.md §3.2
 	pending_entry: dict[int, tuple[int, float, int, Literal["initial", "add"], EntrySrc]] = {}
+	pending_entry_submit_ts: dict[int, int] = {}
 	# 平仓挂单：oid -> ("full"|"partial", 平仓股数)；submit_ts 记录挂单时刻（纳秒）用于超时撤单
 	pending_exit: dict[int, tuple[Literal["full", "partial"], int]] = {}
 	pending_exit_submit_ts: dict[int, int] = {}
@@ -309,6 +319,22 @@ def run_dynamic_hold_backtest(
 				filled_entry_ids.append(oid)
 			for oid in filled_entry_ids:
 				pending_entry.pop(oid, None)
+				pending_entry_submit_ts.pop(oid, None)
+			_twap_clear_tgt_if_idle()
+
+			# --- 开仓挂单超时：>60s 未完全成交则撤单并解锁，避免 TWAP/空仓门闩长期卡住 ---
+			for oid in list(pending_entry.keys()):
+				sub_ts = int(pending_entry_submit_ts.get(oid, now_ts))
+				if now_ts - sub_ts < EXIT_ORDER_STALE_NS:
+					continue
+				try:
+					order = hbt.orders(0).get(int(oid))
+					if order is not None and bool(getattr(order, "cancellable", False)):
+						hbt.cancel(0, int(oid), True)
+				except Exception:
+					pass
+				pending_entry.pop(oid, None)
+				pending_entry_submit_ts.pop(oid, None)
 			_twap_clear_tgt_if_idle()
 
 			# --- 平仓限价单成交 → 生成 Trade；部分减仓后均价不变 ---
@@ -413,12 +439,14 @@ def run_dynamic_hold_backtest(
 					else:
 						blocked_timed_exit_l1_count += 1
 					return
-				exit_px = get_aggressive_limit_price(
+				extra_ticks = int(force_flatten_extra_ticks) if (forced and exit_liq == "taker") else 0
+				exit_px = get_limit_price(
 					best_bid=float(depth.best_bid),
 					best_ask=float(depth.best_ask),
 					side=exit_side,
 					tick_size=tick_size,
-					aggressive_ticks=aggressive_ticks,
+					aggressive_ticks=int(aggressive_ticks) + extra_ticks,
+					liq=exit_liq,
 				)
 				oid = next_order_id
 				next_order_id += 1
@@ -500,17 +528,19 @@ def run_dynamic_hold_backtest(
 						blocked_aum_count += 1
 					return
 				tag: Literal["initial", "add"] = "initial" if current is None else "add"
-				entry_px = get_aggressive_limit_price(
+				entry_px = get_limit_price(
 					best_bid=float(depth.best_bid),
 					best_ask=float(depth.best_ask),
 					side=side,
 					tick_size=tick_size,
 					aggressive_ticks=aggressive_ticks,
+					liq=entry_liq,
 				)
 				oid = next_order_id
 				next_order_id += 1
 				submit_entry_order(hbt, oid, side, step_sh, entry_px)
 				pending_entry[oid] = (side, float(twap_entry_alpha), step_sh, tag, "tw")
+				pending_entry_submit_ts[oid] = now_ts
 
 			# --- 盯市盈亏：止盈 / 止损 / 持有到期（先于当前步 alpha 消费）---
 			if current is not None and not pending_exit:
@@ -553,6 +583,8 @@ def run_dynamic_hold_backtest(
 				next_signal_idx += 1
 
 				if current is None:
+					if pending_entry:
+						continue
 					if twap_rem_sh > 0:
 						continue
 					side = 0
@@ -593,17 +625,19 @@ def run_dynamic_hold_backtest(
 						twap_entry_alpha = float(alpha_val)
 						_try_submit_twap_entry_continue()
 						continue
-					entry_px = get_aggressive_limit_price(
+					entry_px = get_limit_price(
 						best_bid=float(depth.best_bid),
 						best_ask=float(depth.best_ask),
 						side=side,
 						tick_size=tick_size,
 						aggressive_ticks=aggressive_ticks,
+						liq=entry_liq,
 					)
 					oid = next_order_id
 					next_order_id += 1
 					submit_entry_order(hbt, oid, side, shares, entry_px)
 					pending_entry[oid] = (side, alpha_val, shares, "initial", "op")
+					pending_entry_submit_ts[oid] = now_ts
 					continue
 
 				assert current is not None
@@ -660,17 +694,19 @@ def run_dynamic_hold_backtest(
 					if not _is_tradable_for_side_l1_min1lot(depth, add_side, lot_size):
 						blocked_entry_l1_count += 1
 						continue
-					px_in = get_aggressive_limit_price(
+					px_in = get_limit_price(
 						best_bid=float(depth.best_bid),
 						best_ask=float(depth.best_ask),
 						side=add_side,
 						tick_size=tick_size,
 						aggressive_ticks=aggressive_ticks,
+						liq=entry_liq,
 					)
 					oid = next_order_id
 					next_order_id += 1
 					submit_entry_order(hbt, oid, add_side, step_sh, px_in)
 					pending_entry[oid] = (add_side, alpha_val, step_sh, "add", "ld")
+					pending_entry_submit_ts[oid] = now_ts
 					continue
 
 				# k_red > 0
@@ -690,12 +726,13 @@ def run_dynamic_hold_backtest(
 					else:
 						continue
 				exit_side = -1 if current.side > 0 else 1
-				px_out = get_aggressive_limit_price(
+				px_out = get_limit_price(
 					best_bid=float(depth.best_bid),
 					best_ask=float(depth.best_ask),
 					side=exit_side,
 					tick_size=tick_size,
 					aggressive_ticks=aggressive_ticks,
+					liq=exit_liq,
 				)
 				if reduce_sh < lot_size:
 					continue
@@ -762,6 +799,7 @@ def run_dynamic_hold_backtest(
 
 				# 回放结束时，未成交开仓单直接忽略；仓位已在上面兜底平仓。
 				pending_entry.clear()
+				pending_entry_submit_ts.clear()
 				pending_exit.clear()
 				pending_exit_submit_ts.clear()
 				twap_rem_sh = 0

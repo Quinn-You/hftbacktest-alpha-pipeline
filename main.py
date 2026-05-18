@@ -22,6 +22,9 @@ from strategy import StrategyRunResult
 from strategy import StrategyUniverseInput
 from strategy import run_universe_strategy
 
+# ``--daily-aum`` 且未显式传 ``--index-weights`` 时，按权重分摊 AUM 所用的默认 parquet。
+DEFAULT_INDEX_WEIGHTS_PATH = Path("/data/index_weights_300.parquet")
+
 
 def prepared_bundle_to_strategy_input(bundle: PreparedUniverseBundle) -> StrategyUniverseInput:
 	return StrategyUniverseInput(
@@ -84,6 +87,20 @@ def _build_parser(default_strategy_mode: str = "legacy") -> argparse.ArgumentPar
 	p.add_argument("--order-lots", type=int, default=1, help="按手数下单时，每笔下单手数（1手=lot-size股）")
 	p.add_argument("--lot-size", type=int, default=100, help="最小交易数")
 	p.add_argument("--aggressive-ticks", type=int, default=3, help="对手盘一价偏移 tick 数；买单=卖一+n*tick，卖单=买一-n*tick")
+	p.add_argument(
+		"--entry-liq",
+		type=str,
+		choices=["maker", "taker"],
+		default="taker",
+		help="开仓挂单风格：maker=本侧一档，taker=激进对手价",
+	)
+	p.add_argument(
+		"--exit-liq",
+		type=str,
+		choices=["maker", "taker"],
+		default="taker",
+		help="平仓挂单风格：maker=本侧一档，taker=激进对手价",
+	)
 	p.add_argument("--step-ns", type=int, default=5_000_000_000, help="引擎时间推进步长（纳秒）")
 	p.add_argument("--tick-size", type=float, default=0.01, help="最小价格变动")
 	p.add_argument("--order-latency-ns", type=int, default=2_000_000_000, help="单边下单延迟（纳秒）")
@@ -92,7 +109,7 @@ def _build_parser(default_strategy_mode: str = "legacy") -> argparse.ArgumentPar
 	p.add_argument("--commission-rate", type=float, default=0.00015, help="双边手续费率")
 	p.add_argument("--stamp-duty-rate", type=float, default=0.0005, help="印花税率（仅卖出）")
 	p.add_argument("--force-flatten-hhmmss", type=str, default="14:45:00", help="固定日末强平触发时间 HH:MM:SS")
-	p.add_argument("--force-flatten-extra-ticks", type=int, default=5, help="日末兜底强平价格相对市价参考的额外 tick")
+	p.add_argument("--force-flatten-extra-ticks", type=int, default=5, help="强平窗口下 taker 平仓单在 aggressive_ticks 基础上的额外 tick")
 	p.add_argument("--symbols", type=str, default=None, help="可选，逗号分隔的股票代码")
 	p.add_argument("--max-symbols", type=int, default=None, help="可选，仅运行前 N 只股票")
 	p.add_argument("--repo-dir", type=Path, default=None, help="输出 repo 目录")
@@ -101,7 +118,13 @@ def _build_parser(default_strategy_mode: str = "legacy") -> argparse.ArgumentPar
 		"--index-weights",
 		type=Path,
 		default=None,
-		help="可选：指数权重 parquet；若提供则在报表后执行 tool.index_filter",
+		help="可选：指数权重 parquet；若提供则在报表后执行 tool.index_filter；与 --daily-aum 联用时亦作为 AUM 权重源（覆盖 --default-index-weights）",
+	)
+	p.add_argument(
+		"--default-index-weights",
+		type=Path,
+		default=DEFAULT_INDEX_WEIGHTS_PATH,
+		help="daily-aum>0 且未传 --index-weights 时用于按权重分摊的 parquet（不触发 index_filter）",
 	)
 	p.add_argument(
 		"--index-filter-output",
@@ -168,6 +191,8 @@ def _write_run_config(
 		"order_lots": args.order_lots,
 		"lot_size": args.lot_size,
 		"aggressive_ticks": args.aggressive_ticks,
+		"entry_liq": args.entry_liq,
+		"exit_liq": args.exit_liq,
 		"step_ns": args.step_ns,
 		"tick_size": args.tick_size,
 		"order_latency_ns": args.order_latency_ns,
@@ -181,6 +206,7 @@ def _write_run_config(
 		"max_symbols": args.max_symbols,
 		"force_regenerate": args.force_regenerate,
 		"index_weights": str(args.index_weights) if args.index_weights else None,
+		"default_index_weights": str(args.default_index_weights.resolve()),
 		"index_filter_output": str(args.index_filter_output),
 		"index_label": args.index_label,
 		"strategy_mode": args.strategy_mode,
@@ -216,8 +242,7 @@ def run_pipeline(args: argparse.Namespace) -> None:
 		from tool.index_weights import allocate_daily_aum_by_weights
 		from tool.index_weights import build_aum_by_symbol
 
-		default_weights = Path("/data/index_weights_300.parquet")
-		weights_path = args.index_weights if args.index_weights is not None else default_weights
+		weights_path = args.index_weights if args.index_weights is not None else args.default_index_weights
 		aum_weights_resolved = str(weights_path.resolve())
 		if not weights_path.is_file():
 			raise FileNotFoundError(f"AUM 需要指数权重 parquet 文件: {weights_path}")
@@ -241,6 +266,8 @@ def run_pipeline(args: argparse.Namespace) -> None:
 			order_lots=args.order_lots,
 			lot_size=args.lot_size,
 			aggressive_ticks=args.aggressive_ticks,
+			entry_liq=args.entry_liq,
+			exit_liq=args.exit_liq,
 			step_ns=args.step_ns,
 			tick_size=args.tick_size,
 			order_latency_ns=args.order_latency_ns,

@@ -1,0 +1,42 @@
+{
+  "repo_root": "/home/haoranyou/data/output/alpha0.4_1w_5s_3ticks_index_filter/index_weights_1000",
+  "period_months": 12,
+  "period_label": "2026-01-06_to_2026-04-24",
+  "start_time": "2026-01-06 09:51:57",
+  "end_time": "2026-04-24 14:45:02",
+  "n_trades": 30610,
+  "n_symbols": 419,
+  "total_pnl": -102690.3513500002,
+  "long_total_pnl": 141047.92975000013,
+  "short_total_pnl": -243738.2811000003,
+  "total_entry_notional": 288204280.0,
+  "long_entry_notional": 50303943.0,
+  "short_entry_notional": 237900337.0,
+  "total_return_rate": -0.0003563109866029755,
+  "long_return_rate": 0.002803913994376149,
+  "short_return_rate": -0.0010245394528381872,
+  "top_symbols_by_return": [
+    "000801",
+    "002605",
+    "601677",
+    "688158",
+    "300170",
+    "002987",
+    "002588",
+    "603876",
+    "000899",
+    "003039"
+  ],
+  "bottom_symbols_by_return": [
+    "603619",
+    "300047",
+    "002635",
+    "300134",
+    "300821",
+    "603871",
+    "300482",
+    "603888",
+    "688658",
+    "301268"
+  ]
+}

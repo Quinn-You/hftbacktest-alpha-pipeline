@@ -28,8 +28,8 @@ def _build_parser() -> argparse.ArgumentParser:
 		formatter_class=argparse.RawDescriptionHelpFormatter,
 		epilog=(
 			"目录示例:\n"
-			"  /home/you/data/index_filter/csi300/2024-01-03/summary.txt\n"
-			"  /home/you/data/index_filter/csi300/2024-01-03/strategy_layer/all_trades.csv"
+			"  /home/you/data/index_filter/index_weights_300/2024-01-03/summary.txt\n"
+			"  /home/you/data/index_filter/index_weights_300/2024-01-03/strategy_layer/all_trades.csv"
 		),
 	)
 	p.add_argument(
@@ -47,14 +47,14 @@ def _build_parser() -> argparse.ArgumentParser:
 	p.add_argument(
 		"--output-root",
 		type=Path,
-		default=Path("/home/haoranyou/data/index_filter"),
+		default=Path("/home/haoranyou/data/output/alpha0.4_1w_5s_3ticks_index_filter"),
 		help="输出根目录（建议固定一处）；完整路径为 output-root/index-label/YYYY-MM-DD/",
 	)
 	p.add_argument(
 		"--index-label",
 		type=str,
 		default='index_weights_300',
-		help="该次运行使用的子目录名（如 csi300）；默认取权重文件名不含扩展名",
+		help="该次运行使用的子目录名（如 index_weights_300）；默认取权重文件名不含扩展名",
 	)
 	p.add_argument("--start-date", type=str, default=None, help="可选 YYYY-MM-DD")
 	p.add_argument("--end-date", type=str, default=None, help="可选 YYYY-MM-DD")

@@ -327,7 +327,7 @@ def build_period_repo(
 		((pl.col("month_index") - base_month) // period_months).alias("period_id")
 	)
 
-	out_root = repo_root / output_subdir / f"m{period_months}"
+	out_root = repo_root / output_subdir 
 	out_root.mkdir(parents=True, exist_ok=True)
 
 	for period_id in sorted(all_trades.get_column("period_id").unique().to_list()):

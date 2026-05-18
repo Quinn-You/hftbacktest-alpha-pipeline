@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>period report</title>
+  <style>
+    body { font-family: 'DejaVu Sans', sans-serif; margin: 24px; background: #f8fafc; color: #0f172a; }
+    table { border-collapse: collapse; width: 860px; max-width: 100%; background: white; }
+    th, td { border: 1px solid #cbd5e1; padding: 10px 12px; text-align: left; }
+    th { width: 320px; background: #e2e8f0; }
+    img { max-width: 100%; height: auto; border: 1px solid #ddd; margin-top: 14px; }
+  </style>
+</head>
+<body>
+  <h1>区间回测汇总</h1>
+  <table><tr><th>repo_root</th><td>/home/haoranyou/data/output/dynamic_AUM_TAKER_index1000</td></tr>
+<tr><th>period_months</th><td>1</td></tr>
+<tr><th>period_label</th><td>2025-11-04_to_2025-11-28</td></tr>
+<tr><th>start_time</th><td>2025-11-04 09:50:17</td></tr>
+<tr><th>end_time</th><td>2025-11-28 14:42:37</td></tr>
+<tr><th>n_trades</th><td>10367</td></tr>
+<tr><th>n_symbols</th><td>286</td></tr>
+<tr><th>total_pnl</th><td>-237349.4351000018</td></tr>
+<tr><th>long_total_pnl</th><td>-28806.950949999395</td></tr>
+<tr><th>short_total_pnl</th><td>-208542.4841500024</td></tr>
+<tr><th>total_entry_notional</th><td>180834544.0</td></tr>
+<tr><th>long_entry_notional</th><td>38975509.0</td></tr>
+<tr><th>short_entry_notional</th><td>141859035.0</td></tr>
+<tr><th>total_return_rate</th><td>-0.0013125226510926021</td></tr>
+<tr><th>long_return_rate</th><td>-0.0007391039062504455</td></tr>
+<tr><th>short_return_rate</th><td>-0.001470068396771502</td></tr>
+<tr><th>top_symbols_by_return</th><td>[&quot;300360&quot;, &quot;600645&quot;, &quot;600459&quot;, &quot;600416&quot;, &quot;000422&quot;, &quot;000821&quot;, &quot;600201&quot;, &quot;603108&quot;, &quot;603698&quot;, &quot;603636&quot;]</td></tr>
+<tr><th>bottom_symbols_by_return</th><td>[&quot;002043&quot;, &quot;002706&quot;, &quot;002265&quot;, &quot;300036&quot;, &quot;603505&quot;, &quot;603033&quot;, &quot;300184&quot;, &quot;002405&quot;, &quot;688127&quot;, &quot;600596&quot;]</td></tr></table>
+  <h2>全市场累计 PnL 曲线</h2>
+  <img src="market_long_short_total_cumulative_pnl.png" alt="market_long_short_total_cumulative_pnl" />
+  <h2>收益率 Top / Bottom 股票</h2>
+  <img src="symbol_return_rank.png" alt="symbol_return_rank" />
+</body>
+</html>

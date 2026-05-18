@@ -38,6 +38,7 @@ def next_trading_day_after(t: date, trading_days: list[date]) -> date | None:
 	"""``trading_days`` 已排序；返回第一个严格大于 ``t`` 的日期。"""
 	if not trading_days:
 		return None
+	#在已排序的列里面做二分查找，返回索引
 	i = bisect.bisect_right(trading_days, t)
 	if i < len(trading_days):
 		return trading_days[i]

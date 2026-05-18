@@ -21,6 +21,7 @@ from datetime import timezone
 from pathlib import Path
 from typing import Any
 from typing import Iterable
+from typing import Literal
 
 import numpy as np
 import polars as pl
@@ -99,24 +100,24 @@ def ns_to_text(ts_ns: int) -> str:
 
 
 def resolve_alpha_path(alpha_path: Path, trade_date: str) -> Path:
-	"""兼容直接传 parquet 文件或传 alpha_monthly 根目录两种用法。"""
+	"""解析当日 alpha parquet。
+
+	- 传具体 ``.parquet`` 文件：原样返回（须存在且为文件）。
+	- 传目录：只在该目录树下 ``rglob`` 当日文件名，**不会**自动抬到 ``alpha_monthly`` 全盘搜索（多命中则报错）。
+	"""
 	if alpha_path.is_file():
 		return alpha_path
 
 	target_name = f"{trade_date}.parquet"
 	search_root = alpha_path.parent if alpha_path.suffix == ".parquet" else alpha_path
-	if search_root.name != "alpha_monthly":
-		for parent in [search_root, *search_root.parents]:
-			if parent.name == "alpha_monthly":
-				search_root = parent
-				break
+	if not search_root.exists():
+		raise FileNotFoundError(f"未找到 alpha 路径：{alpha_path}")
 
-	if search_root.exists():
-		matches = sorted(search_root.rglob(target_name))
-		if len(matches) == 1:
-			return matches[0]
-		if len(matches) > 1:
-			raise ValueError(f"找到多个 alpha 文件，请手工指定更精确路径：{[str(item) for item in matches[:5]]}")
+	matches = sorted(search_root.rglob(target_name))
+	if len(matches) == 1:
+		return matches[0]
+	if len(matches) > 1:
+		raise ValueError(f"找到多个 alpha 文件，请手工指定更精确路径：{[str(item) for item in matches[:5]]}")
 
 	raise FileNotFoundError(f"未找到 alpha 文件：{alpha_path}，且在 {search_root} 下也未找到 {target_name}")
 
@@ -228,6 +229,30 @@ def compute_order_shares(
 	return int(shares)
 
 
+OrderLiq = Literal["maker", "taker"]
+
+
+def get_limit_price(
+	best_bid: float,
+	best_ask: float,
+	side: int,
+	tick_size: float,
+	aggressive_ticks: int,
+	liq: OrderLiq = "taker",
+) -> float:
+	"""按流动性风格构造限价：taker=激进，maker=挂本侧一档。"""
+	if liq not in {"maker", "taker"}:
+		raise ValueError(f"liq 必须是 maker 或 taker，收到: {liq}")
+	if liq == "maker":
+		if side > 0:
+			return max(float(tick_size), float(best_bid))
+		return max(float(tick_size), float(best_ask))
+	offset = float(aggressive_ticks) * float(tick_size)
+	if side > 0:
+		return float(best_ask) + offset
+	return max(float(tick_size), float(best_bid) - offset)
+
+
 def get_aggressive_limit_price(
 	best_bid: float,
 	best_ask: float,
@@ -235,12 +260,15 @@ def get_aggressive_limit_price(
 	tick_size: float,
 	aggressive_ticks: int,
 ) -> float:
-	"""构造对手盘一价偏移 n tick 的限价单价格。"""
-	offset = float(aggressive_ticks) * float(tick_size)
-	#side为1时，是买，买对手盘的卖一价+offset，卖则是对手盘的买一价-offset
-	if side > 0:
-		return float(best_ask) + offset
-	return max(float(tick_size), float(best_bid) - offset)
+	"""兼容旧接口：等价于 ``get_limit_price(..., liq='taker')``。"""
+	return get_limit_price(
+		best_bid=best_bid,
+		best_ask=best_ask,
+		side=side,
+		tick_size=tick_size,
+		aggressive_ticks=aggressive_ticks,
+		liq="taker",
+	)
 
 
 def _has_valid_book_for_side(depth: Any, side: int) -> bool:
@@ -426,23 +454,24 @@ def trades_to_dataframe(trades: list[Trade]) -> pl.DataFrame:
 		row["exit_time"] = ns_to_text(trade.exit_ts_ns)
 		rows.append(row)
 	if not rows:
+		# 空列表无法推断 Utf8，Polars 会得到 Null 列；报表层对 exit_time 使用 .str 会崩。
 		return pl.DataFrame(
-			{
-				"side": [],
-				"entry_time": [],
-				"exit_time": [],
-				"entry_px": [],
-				"exit_px": [],
-				"shares": [],
-				"entry_notional": [],
-				"exit_notional": [],
-				"pnl_gross": [],
-				"commission": [],
-				"stamp_duty": [],
-				"total_cost": [],
-				"pnl": [],
-				"ret": [],
-				"alpha_signal": [],
+			schema={
+				"side": pl.Utf8,
+				"entry_time": pl.Utf8,
+				"exit_time": pl.Utf8,
+				"entry_px": pl.Float64,
+				"exit_px": pl.Float64,
+				"shares": pl.Int64,
+				"entry_notional": pl.Float64,
+				"exit_notional": pl.Float64,
+				"pnl_gross": pl.Float64,
+				"commission": pl.Float64,
+				"stamp_duty": pl.Float64,
+				"total_cost": pl.Float64,
+				"pnl": pl.Float64,
+				"ret": pl.Float64,
+				"alpha_signal": pl.Float64,
 			}
 		)
 	return pl.DataFrame(rows).select(

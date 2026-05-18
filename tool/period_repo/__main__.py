@@ -13,12 +13,12 @@ def _build_parser() -> argparse.ArgumentParser:
 	p.add_argument(
 		"--repo-root",
 		type=Path,
-		default=Path("/home/haoranyou/data/output/alpha0.4_1w_5s_3ticks"),
+		default=Path("/home/haoranyou/data/output/alpha0.4_1w_5s_3ticks_index_filter/index_weights_300"),
 		help="日度 repo 根目录（目录结构: repo_root/YYYY-MM-DD/strategy_layer/all_trades.csv）",
 	)
 	p.add_argument("--period-months", type=int, default=1, help="区间长度（月），1=按月，3=按季度近似，6=半年度等")
 	p.add_argument("--top-n", type=int, default=10, help="收益率排名展示股票数量")
-	p.add_argument("--output-subdir", type=str, default="/home/haoranyou/data/period_repo", help="输出子目录名（相对 repo-root）")
+	p.add_argument("--output-subdir", type=str, default="/home/haoranyou/data/period_repo/alpha0.4_1w_5s_3ticks_index_filter/index300/yearly", help="输出子目录名（相对 repo-root）")
 	p.add_argument("--start-date", type=str, default=None, help="可选，起始日期 YYYY-MM-DD")
 	p.add_argument("--end-date", type=str, default=None, help="可选，结束日期 YYYY-MM-DD")
 	return p

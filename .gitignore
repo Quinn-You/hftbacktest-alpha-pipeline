@@ -60,11 +60,6 @@ Thumbs.db
 .idea/
 # .vscode/
 
-# Pipeline outputs if written under repo root (defaults in code may be elsewhere)
-output/
-runs/
-artifacts/
-
 # Large local datasets / streams (use `git add -f path` for tiny committed fixtures)
 *.npz
 *.parquet

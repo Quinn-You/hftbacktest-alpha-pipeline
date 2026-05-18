@@ -9,10 +9,11 @@ from typing import Any
 
 from ..backtest import GTC
 from ..backtest import LIMIT
+from ..backtest import OrderLiq
 from ..backtest import Trade
 from ..backtest import build_hbt
 from ..backtest import compute_order_shares
-from ..backtest import get_aggressive_limit_price
+from ..backtest import get_limit_price
 from ..backtest import hold_target_ts_excluding_lunch
 from ..backtest import is_order_filled
 from ..backtest import submit_entry_order
@@ -131,6 +132,8 @@ def run_backtest_for_alpha_records(
 	stamp_duty_rate: float,
 	force_flatten_hhmmss: str = "14:45:00",
 	force_flatten_extra_ticks: int = 5,
+	entry_liq: OrderLiq = "taker",
+	exit_liq: OrderLiq = "taker",
 	aum: float | None = None,
 	trade_unit_clip_frac: float | None = None,
 ) -> tuple[list[Trade], dict[str, float]]:
@@ -158,6 +161,10 @@ def run_backtest_for_alpha_records(
 		raise ValueError("aggressive_ticks 不能为负数")
 	if force_flatten_extra_ticks < 0:
 		raise ValueError("force_flatten_extra_ticks 不能为负数")
+	if entry_liq not in {"maker", "taker"}:
+		raise ValueError("entry_liq 必须是 maker 或 taker")
+	if exit_liq not in {"maker", "taker"}:
+		raise ValueError("exit_liq 必须是 maker 或 taker")
 	try:
 		force_flatten_ts_ns = to_ns_utc(trade_date, force_flatten_hhmmss)
 	except ValueError as exc:
@@ -244,12 +251,13 @@ def run_backtest_for_alpha_records(
 				if not _is_tradable_for_side_l1_min1lot(depth, exit_side, lot_size):
 					blocked_timed_exit_l1_count += 1
 					continue
-				exit_px = get_aggressive_limit_price(
+				exit_px = get_limit_price(
 					best_bid=float(depth.best_bid),
 					best_ask=float(depth.best_ask),
 					side=exit_side,
 					tick_size=tick_size,
 					aggressive_ticks=aggressive_ticks,
+					liq=exit_liq,
 				)
 				submit_exit_order(hbt, oid, pos, exit_px)
 				pos.exit_order_id = oid
@@ -297,12 +305,14 @@ def run_backtest_for_alpha_records(
 						blocked_forced_exit_l1_count += 1
 						continue
 					#检查当前的深度是否可以平仓，若可以则submit激进限价单去完成平仓
-					exit_px = get_aggressive_limit_price(
+					extra_ticks = int(force_flatten_extra_ticks) if exit_liq == "taker" else 0
+					exit_px = get_limit_price(
 						best_bid=float(depth.best_bid),
 						best_ask=float(depth.best_ask),
 						side=exit_side,
 						tick_size=tick_size,
-						aggressive_ticks=aggressive_ticks,
+						aggressive_ticks=int(aggressive_ticks) + extra_ticks,
+						liq=exit_liq,
 					)
 					submit_exit_order(hbt, oid, pos, exit_px)
 					pos.exit_order_id = oid
@@ -345,12 +355,13 @@ def run_backtest_for_alpha_records(
 						blocked_aum_count += 1
 					continue
 
-				entry_px = get_aggressive_limit_price(
+				entry_px = get_limit_price(
 					best_bid=float(depth.best_bid),
 					best_ask=float(depth.best_ask),
 					side=side,
 					tick_size=tick_size,
 					aggressive_ticks=aggressive_ticks,
+					liq=entry_liq,
 				)
 
 				oid = next_order_id

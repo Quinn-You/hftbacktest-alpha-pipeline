@@ -55,6 +55,8 @@ class StrategyConfig:
 	stamp_duty_rate: float
 	force_flatten_hhmmss: str
 	force_flatten_extra_ticks: int
+	entry_liq: str = "taker"
+	exit_liq: str = "taker"
 	# legacy | dynamic_hold
 	strategy_mode: str = "legacy"
 	alpha_adjust_step: float = 0.01
@@ -129,6 +131,8 @@ def run_universe_strategy(bundle: StrategyUniverseInput, config: StrategyConfig)
 					stamp_duty_rate=config.stamp_duty_rate,
 					force_flatten_hhmmss=config.force_flatten_hhmmss,
 					force_flatten_extra_ticks=config.force_flatten_extra_ticks,
+					entry_liq=config.entry_liq,
+					exit_liq=config.exit_liq,
 					alpha_adjust_step=config.alpha_adjust_step,
 					adjust_notional=config.adjust_notional,
 					take_profit_pct=config.take_profit_pct,
@@ -158,6 +162,8 @@ def run_universe_strategy(bundle: StrategyUniverseInput, config: StrategyConfig)
 					stamp_duty_rate=config.stamp_duty_rate,
 					force_flatten_hhmmss=config.force_flatten_hhmmss,
 					force_flatten_extra_ticks=config.force_flatten_extra_ticks,
+					entry_liq=config.entry_liq,
+					exit_liq=config.exit_liq,
 					aum=symbol_aum,
 					trade_unit_clip_frac=config.trade_unit_clip_frac,
 				)
@@ -216,25 +222,29 @@ def run_universe_strategy(bundle: StrategyUniverseInput, config: StrategyConfig)
 			}
 		)
 
-	all_trades_df = pl.concat(all_trade_frames, how="diagonal_relaxed") if all_trade_frames else pl.DataFrame(
-		{
-			"symbol": [],
-			"side": [],
-			"entry_time": [],
-			"exit_time": [],
-			"entry_px": [],
-			"exit_px": [],
-			"shares": [],
-			"entry_notional": [],
-			"exit_notional": [],
-			"pnl_gross": [],
-			"commission": [],
-			"stamp_duty": [],
-			"total_cost": [],
-			"pnl": [],
-			"ret": [],
-			"alpha_signal": [],
-		}
+	all_trades_df = (
+		pl.concat(all_trade_frames, how="diagonal_relaxed")
+		if all_trade_frames
+		else pl.DataFrame(
+			schema={
+				"symbol": pl.Utf8,
+				"side": pl.Utf8,
+				"entry_time": pl.Utf8,
+				"exit_time": pl.Utf8,
+				"entry_px": pl.Float64,
+				"exit_px": pl.Float64,
+				"shares": pl.Int64,
+				"entry_notional": pl.Float64,
+				"exit_notional": pl.Float64,
+				"pnl_gross": pl.Float64,
+				"commission": pl.Float64,
+				"stamp_duty": pl.Float64,
+				"total_cost": pl.Float64,
+				"pnl": pl.Float64,
+				"ret": pl.Float64,
+				"alpha_signal": pl.Float64,
+			}
+		)
 	)
 	summary_df = (
 		pl.DataFrame(summary_rows, infer_schema_length=None)

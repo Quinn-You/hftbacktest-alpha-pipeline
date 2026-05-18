@@ -1,0 +1,42 @@
+{
+  "repo_root": "/home/haoranyou/data/output/dynamic_AUM_TAKER_index500",
+  "period_months": 1,
+  "period_label": "2024-12-03_to_2024-12-31",
+  "start_time": "2024-12-03 09:50:22",
+  "end_time": "2024-12-31 14:38:02",
+  "n_trades": 8119,
+  "n_symbols": 84,
+  "total_pnl": -119421.90260000061,
+  "long_total_pnl": -1299.7675499991744,
+  "short_total_pnl": -118122.13505000144,
+  "total_entry_notional": 153631980.0,
+  "long_entry_notional": 65406974.0,
+  "short_entry_notional": 88225006.0,
+  "total_return_rate": -0.000777324503661286,
+  "long_return_rate": -1.9872002487061615e-05,
+  "short_return_rate": -0.001338873641448111,
+  "top_symbols_by_return": [
+    "300296",
+    "600764",
+    "002563",
+    "002945",
+    "603185",
+    "002407",
+    "002558",
+    "002436",
+    "601216",
+    "600707"
+  ],
+  "bottom_symbols_by_return": [
+    "300568",
+    "000519",
+    "688772",
+    "300118",
+    "002568",
+    "600131",
+    "000818",
+    "601155",
+    "000155",
+    "603816"
+  ]
+}
